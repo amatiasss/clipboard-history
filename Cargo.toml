@@ -1,0 +1,3 @@
+[workspace]
+members = ["crates/clipboard-daemon", "crates/clipboard-applet"]
+resolver = "2"

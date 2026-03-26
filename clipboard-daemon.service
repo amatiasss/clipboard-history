@@ -1,0 +1,12 @@
+[Unit]
+Description=Clipboard History Daemon
+After=graphical-session.target
+PartOf=graphical-session.target
+
+[Service]
+ExecStart=/usr/local/bin/clipboard-daemon
+Restart=on-failure
+RestartSec=3
+
+[Install]
+WantedBy=graphical-session.target
