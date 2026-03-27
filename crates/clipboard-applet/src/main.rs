@@ -5,8 +5,35 @@ use cosmic::iced::{Length, Rectangle};
 use cosmic::surface::action::{app_popup, destroy_popup};
 use cosmic::Element;
 use cosmic::cosmic_config::{Config, ConfigGet, ConfigSet};
+use i18n_embed::{
+    fluent::{fluent_language_loader, FluentLanguageLoader},
+    DesktopLanguageRequester,
+};
+use i18n_embed_fl::fl;
+use once_cell::sync::Lazy;
+use rust_embed::RustEmbed;
 use serde::{Deserialize, Serialize};
 use std::{fs, path::PathBuf};
+
+#[derive(RustEmbed)]
+#[folder = "i18n"]
+struct Localizations;
+
+static LANGUAGE_LOADER: Lazy<FluentLanguageLoader> = Lazy::new(|| {
+    let loader = fluent_language_loader!();
+    let requested = DesktopLanguageRequester::requested_languages();
+    let _ = i18n_embed::select(&loader, &Localizations, &requested);
+    loader
+});
+
+macro_rules! fl {
+    ($message_id:literal) => {{
+        i18n_embed_fl::fl!(&*LANGUAGE_LOADER, $message_id)
+    }};
+    ($message_id:literal, $($key:ident = $value:expr),+) => {{
+        i18n_embed_fl::fl!(&*LANGUAGE_LOADER, $message_id, $($key = $value),+)
+    }};
+}
 
 const APP_ID: &str = "com.github.clipboard-history";
 const CONFIG_VERSION: u64 = 1;
@@ -133,17 +160,6 @@ impl cosmic::Application for Window {
 
     fn on_close_requested(&self, id: cosmic::iced_runtime::core::window::Id) -> Option<Message> {
         Some(Message::PopupClosed(id))
-    }
-
-    fn dbus_activation(&mut self, _msg: cosmic::dbus_activation::Message) -> Task<Message> {
-        // Toggle popup on any activation (Super+V)
-        if self.popup.is_some() {
-            cosmic::task::message(cosmic::Action::App(Message::Surface(
-                destroy_popup(self.popup.unwrap()),
-            )))
-        } else {
-            cosmic::task::message(cosmic::Action::App(Message::TogglePopup))
-        }
     }
 
     fn update(&mut self, message: Message) -> Task<Message> {
@@ -334,9 +350,10 @@ impl cosmic::Application for Window {
                 }
             });
 
+        let tooltip: &'static str = Box::leak(fl!("applet-tooltip").into_boxed_str());
         Element::from(self.core.applet.applet_tooltip::<Message>(
             btn,
-            "Clipboard History",
+            tooltip,
             self.popup.is_some(),
             Message::Surface,
             None,
@@ -356,7 +373,7 @@ impl cosmic::Application for Window {
         if entries.is_empty() {
             list_items.push(
                 cosmic::widget::container(
-                    cosmic::widget::text("No clipboard history yet.").size(14)
+                    cosmic::widget::text(fl!("no-history")).size(14)
                 )
                 .padding([8, 16])
                 .into(),
@@ -434,18 +451,18 @@ impl cosmic::Application for Window {
         let bottom_bar = cosmic::widget::row::with_children(vec![
             cosmic::widget::toggler(self.private_mode)
                 .on_toggle(Message::TogglePrivateMode)
-                .label("Private mode".to_string())
+                .label(fl!("private-mode"))
                 .spacing(8)
                 .into(),
             cosmic::widget::Space::new().width(Length::Fill).into(),
             cosmic::widget::button::destructive(if self.search.is_empty() {
-                "Clear all".to_string()
+                fl!("clear-all")
             } else {
                 let n = self.history.entries.iter()
                     .filter(|e| e.to_lowercase().contains(&self.search.to_lowercase()))
                     .count()
                     .min(self.max_entries);
-                format!("Delete listed ({n})")
+                fl!("clear-n", count = n)
             })
             .on_press(Message::DeleteAll)
             .into(),
@@ -454,7 +471,7 @@ impl cosmic::Application for Window {
 
         let content = cosmic::widget::column::with_children(vec![
             cosmic::widget::container(
-                cosmic::widget::search_input("Search...", &self.search)
+                cosmic::widget::search_input(fl!("search-placeholder"), &self.search)
                     .on_input(Message::SearchChanged)
                     .width(Length::Fill),
             )
