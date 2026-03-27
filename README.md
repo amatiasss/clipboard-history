@@ -28,7 +28,7 @@ Clipboard history manager for the [COSMIC Desktop](https://github.com/pop-os/cos
 sudo apt install wl-clipboard
 
 # Clone and build
-git clone https://github.com/<your-user>/clipboard-history
+git clone https://github.com/amatiasss/clipboard-history
 cd clipboard-history
 cargo build --release
 
