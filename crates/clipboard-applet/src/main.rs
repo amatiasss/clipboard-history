@@ -140,8 +140,6 @@ pub enum Message {
     KeyDown,
     KeyEnter,
     SearchChanged(String),
-    SearchAppend(String),
-    SearchBackspace,
     FocusSearch,
 }
 
@@ -245,18 +243,6 @@ impl cosmic::Application for Window {
                     fs::write(&path, "").ok();
                 } else {
                     fs::remove_file(&path).ok();
-                }
-            }
-            Message::SearchAppend(s) => {
-                if self.popup.is_some() {
-                    self.search.push_str(&s);
-                    self.selected_index = None;
-                }
-            }
-            Message::SearchBackspace => {
-                if self.popup.is_some() {
-                    self.search.pop();
-                    self.selected_index = None;
                 }
             }
             Message::KeyDown => {
@@ -507,12 +493,10 @@ impl cosmic::Application for Window {
                     Key::Named(Named::ArrowDown) => return Some(Message::KeyDown),
                     Key::Named(Named::ArrowUp) => return Some(Message::KeyUp),
                     Key::Named(Named::Enter) => return Some(Message::KeyEnter),
-                    Key::Named(Named::Backspace) => return Some(Message::SearchBackspace),
                     Key::Named(_) => return None,
                     Key::Character(c) if c.as_ref() as &str == "k" && modifiers.contains(Modifiers::CTRL) => {
                         return Some(Message::FocusSearch)
                     }
-                    Key::Character(c) => return Some(Message::SearchAppend(c.to_string())),
                     _ => return None,
                 }
             }
