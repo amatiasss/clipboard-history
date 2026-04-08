@@ -1,3 +1,4 @@
+use fs2::FileExt;
 use serde::{Deserialize, Serialize};
 use std::{
     fs,
@@ -5,6 +6,8 @@ use std::{
     path::PathBuf,
     process::{Command, Stdio},
 };
+
+const MAX_ENTRIES: usize = 200;
 
 #[derive(Serialize, Deserialize, PartialEq, Debug)]
 pub struct History {
@@ -31,15 +34,33 @@ pub fn is_private_mode() -> bool {
 }
 
 pub fn load_history(path: &PathBuf) -> History {
-    fs::read_to_string(path)
-        .ok()
-        .and_then(|s| serde_json::from_str(&s).ok())
-        .unwrap_or(History { entries: vec![] })
+    let file = fs::OpenOptions::new().read(true).write(true).create(true).open(path);
+    match file {
+        Ok(f) => {
+            f.lock_exclusive().ok();
+            let result = fs::read_to_string(path)
+                .ok()
+                .and_then(|s| serde_json::from_str(&s).ok())
+                .unwrap_or(History { entries: vec![] });
+            f.unlock().ok();
+            result
+        }
+        Err(_) => History { entries: vec![] },
+    }
 }
 
-pub fn save_history(path: &PathBuf, history: &History) {
-    if let Ok(json) = serde_json::to_string_pretty(history) {
-        fs::write(path, json).ok();
+pub fn save_history(path: &PathBuf, history: &mut History) {
+    if history.entries.len() > MAX_ENTRIES {
+        let drain_count = history.entries.len() - MAX_ENTRIES;
+        history.entries.drain(0..drain_count);
+    }
+    let file = fs::OpenOptions::new().write(true).create(true).open(path);
+    if let Ok(f) = file {
+        f.lock_exclusive().ok();
+        if let Ok(json) = serde_json::to_string_pretty(&*history) {
+            fs::write(path, json).ok();
+        }
+        f.unlock().ok();
     }
 }
 
@@ -83,7 +104,7 @@ fn main() {
                     if history.entries.last().map(|e| e.as_str()) != Some(&text) {
                         println!("Captured: {}", &text[..text.len().min(80)]);
                         history.entries.push(text);
-                        save_history(&path, &history);
+                        save_history(&path, &mut history);
                     }
                 }
             }
@@ -119,10 +140,10 @@ mod tests {
     #[test]
     fn save_and_load_roundtrip() {
         let path = tmp_path();
-        let original = History {
+        let mut original = History {
             entries: vec!["hello".into(), "world".into()],
         };
-        save_history(&path, &original);
+        save_history(&path, &mut original);
         let loaded = load_history(&path);
         assert_eq!(original, loaded);
         fs::remove_file(&path).ok();
@@ -143,7 +164,7 @@ mod tests {
         let mut history = History { entries: vec![] };
         for text in ["first", "second", "third"] {
             history.entries.push(text.into());
-            save_history(&path, &history);
+            save_history(&path, &mut history);
         }
         let loaded = load_history(&path);
         assert_eq!(loaded.entries, vec!["first", "second", "third"]);

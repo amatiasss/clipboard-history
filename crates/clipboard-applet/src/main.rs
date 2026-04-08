@@ -5,6 +5,7 @@ use cosmic::iced::{Length, Rectangle};
 use cosmic::surface::action::{app_popup, destroy_popup};
 use cosmic::Element;
 use cosmic::cosmic_config::{Config, ConfigGet, ConfigSet};
+use fs2::FileExt;
 use i18n_embed::{
     fluent::{fluent_language_loader, FluentLanguageLoader},
     DesktopLanguageRequester,
@@ -40,6 +41,8 @@ const CONFIG_VERSION: u64 = 1;
 const DEFAULT_MAX_ENTRIES: usize = 20;
 const SCROLL_ID: &str = "clipboard-scroll";
 
+static TOOLTIP: Lazy<String> = Lazy::new(|| fl!("applet-tooltip"));
+
 fn private_mode_path() -> PathBuf {
     let mut path = dirs_next::data_dir().unwrap_or_else(|| PathBuf::from("."));
     path.push("clipboard-history");
@@ -60,15 +63,31 @@ fn history_path() -> PathBuf {
 }
 
 fn load_history() -> History {
-    fs::read_to_string(history_path())
-        .ok()
-        .and_then(|s| serde_json::from_str(&s).ok())
-        .unwrap_or_default()
+    let path = history_path();
+    let file = fs::OpenOptions::new().read(true).write(true).create(true).open(&path);
+    match file {
+        Ok(f) => {
+            f.lock_exclusive().ok();
+            let result = fs::read_to_string(&path)
+                .ok()
+                .and_then(|s| serde_json::from_str(&s).ok())
+                .unwrap_or_default();
+            f.unlock().ok();
+            result
+        }
+        Err(_) => History::default(),
+    }
 }
 
 fn save_history(history: &History) {
-    if let Ok(json) = serde_json::to_string_pretty(history) {
-        fs::write(history_path(), json).ok();
+    let path = history_path();
+    let file = fs::OpenOptions::new().write(true).create(true).open(&path);
+    if let Ok(f) = file {
+        f.lock_exclusive().ok();
+        if let Ok(json) = serde_json::to_string_pretty(history) {
+            fs::write(&path, json).ok();
+        }
+        f.unlock().ok();
     }
 }
 
@@ -131,7 +150,6 @@ impl Default for Window {
 pub enum Message {
     PopupClosed(Id),
     Surface(cosmic::surface::Action),
-    TogglePopup,
     CopyEntry(usize),
     DeleteEntry(usize),
     DeleteAll,
@@ -176,16 +194,6 @@ impl cosmic::Application for Window {
                     cosmic::app::Action::Surface(a),
                 ));
             }
-            Message::TogglePopup => {
-                if let Some(id) = self.popup {
-                    return cosmic::task::message(cosmic::Action::Cosmic(
-                        cosmic::app::Action::Surface(destroy_popup(id)),
-                    ));
-                }
-                // simulate button press to open popup — reuse the same logic via Surface
-                // We can't easily replicate on_press_with_rectangle here, so just do nothing
-                // The user can click the icon to open; Super+V closes if open
-            }
             Message::FocusSearch => {
                 self.selected_index = None;
                 self.search = String::new();
@@ -207,7 +215,7 @@ impl cosmic::Application for Window {
                         if let Some(mut stdin) = child.stdin.take() {
                             stdin.write_all(text.as_bytes()).ok();
                         }
-                        std::mem::forget(child);
+                        std::thread::spawn(move || { child.wait().ok(); });
                     }
                 }
                 if let Some(id) = self.popup.take() {
@@ -350,7 +358,7 @@ impl cosmic::Application for Window {
                 }
             });
 
-        let tooltip: &'static str = Box::leak(fl!("applet-tooltip").into_boxed_str());
+        let tooltip: &str = &*TOOLTIP;
         Element::from(self.core.applet.applet_tooltip::<Message>(
             btn,
             tooltip,
