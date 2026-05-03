@@ -78,7 +78,6 @@ clipboard-history/
 
 ```bash
 cargo build --release -p clipboard-applet \
-  && install -m755 target/release/clipboard-applet ~/.local/bin/clipboard-applet \
   && sudo install -m755 target/release/clipboard-applet /usr/bin/clipboard-applet \
   && kill -9 $(pgrep -f clipboard-applet) 2>/dev/null
 ```
