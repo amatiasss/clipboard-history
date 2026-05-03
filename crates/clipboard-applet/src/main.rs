@@ -4,7 +4,7 @@ use cosmic::iced::window::Id;
 use cosmic::iced::{Length, Rectangle};
 use cosmic::surface::action::{app_popup, destroy_popup};
 use cosmic::Element;
-use cosmic::cosmic_config::{Config, ConfigGet, ConfigSet};
+use cosmic::cosmic_config::{Config, ConfigGet};
 use fs2::FileExt;
 use i18n_embed::{
     fluent::{fluent_language_loader, FluentLanguageLoader},
@@ -319,13 +319,17 @@ impl cosmic::Application for Window {
         Task::none()
     }
 
-    fn view(&self) -> Element<Message> {
+    fn view(&self) -> Element<'_, Message> {
         let have_popup = self.popup;
         let btn = self
             .core
             .applet
             .icon_button("edit-paste-symbolic")
             .on_press_with_rectangle(move |offset, bounds| {
+                let rx = (bounds.x - offset.x) as i32;
+                let ry = (bounds.y - offset.y) as i32;
+                let rw = bounds.width as i32;
+                let rh = bounds.height as i32;
                 if let Some(id) = have_popup {
                     Message::Surface(destroy_popup(id))
                 } else {
@@ -337,8 +341,9 @@ impl cosmic::Application for Window {
                             state.search = String::new();
                             let new_id = Id::unique();
                             state.popup = Some(new_id);
+                            let parent = state.core.main_window_id().unwrap();
                             let mut popup_settings = state.core.applet.get_popup_settings(
-                                state.core.main_window_id().unwrap(),
+                                parent,
                                 new_id,
                                 None,
                                 None,
@@ -346,10 +351,7 @@ impl cosmic::Application for Window {
                             );
                             popup_settings.positioner.size = Some((600, 400));
                             popup_settings.positioner.anchor_rect = Rectangle {
-                                x: (bounds.x - offset.x) as i32,
-                                y: (bounds.y - offset.y) as i32,
-                                width: bounds.width as i32,
-                                height: bounds.height as i32,
+                                x: rx, y: ry, width: rw, height: rh,
                             };
                             popup_settings
                         },
@@ -368,7 +370,7 @@ impl cosmic::Application for Window {
         ))
     }
 
-    fn view_window(&self, _id: Id) -> Element<Message> {
+    fn view_window(&self, _id: Id) -> Element<'_, Message> {
         let search_lower = self.search.to_lowercase();
         let entries: Vec<(usize, &String)> = self.history.entries
             .iter().enumerate().rev()
@@ -520,7 +522,7 @@ impl cosmic::Application for Window {
                     Key::Character(c) if c.as_ref() as &str == "k" && modifiers.contains(Modifiers::CTRL) => {
                         return Some(Message::FocusSearch)
                     }
-                    Key::Character(c) => return Some(Message::SearchAppend(c.to_string())),
+                    Key::Character(_) => return None,
                     _ => return None,
                 }
             }
