@@ -54,7 +54,7 @@ pub fn save_history(path: &PathBuf, history: &mut History) {
         let drain_count = history.entries.len() - MAX_ENTRIES;
         history.entries.drain(0..drain_count);
     }
-    let file = fs::OpenOptions::new().write(true).create(true).open(path);
+    let file = fs::OpenOptions::new().write(true).create(true).truncate(true).open(path);
     if let Ok(f) = file {
         f.lock_exclusive().ok();
         if let Ok(json) = serde_json::to_string_pretty(&*history) {
