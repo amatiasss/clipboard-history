@@ -1,0 +1,6 @@
+[Desktop Entry]
+Name=Clipboard History Launcher
+Type=Application
+Exec=clipboard-launcher
+NoDisplay=true
+DBusActivatable=true

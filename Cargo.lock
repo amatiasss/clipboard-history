@@ -696,6 +696,22 @@ dependencies = [
 ]
 
 [[package]]
+name = "clipboard-launcher"
+version = "0.1.0"
+dependencies = [
+ "dirs-next",
+ "emojis",
+ "fs2",
+ "i18n-embed 0.15.4",
+ "i18n-embed-fl 0.9.4",
+ "libcosmic",
+ "once_cell",
+ "rust-embed",
+ "serde",
+ "serde_json",
+]
+
+[[package]]
 name = "clipboard-win"
 version = "5.4.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
