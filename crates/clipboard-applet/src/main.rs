@@ -81,7 +81,7 @@ fn load_history() -> History {
 
 fn save_history(history: &History) {
     let path = history_path();
-    let file = fs::OpenOptions::new().write(true).create(true).open(&path);
+    let file = fs::OpenOptions::new().write(true).create(true).truncate(true).open(&path);
     if let Ok(f) = file {
         f.lock_exclusive().ok();
         if let Ok(json) = serde_json::to_string_pretty(history) {

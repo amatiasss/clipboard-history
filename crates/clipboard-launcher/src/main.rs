@@ -75,7 +75,7 @@ fn load_history() -> History {
 
 fn save_history(history: &History) {
     let path = history_path();
-    if let Ok(f) = fs::OpenOptions::new().write(true).create(true).open(&path) {
+    if let Ok(f) = fs::OpenOptions::new().write(true).create(true).truncate(true).open(&path) {
         f.lock_exclusive().ok();
         if let Ok(json) = serde_json::to_string_pretty(history) {
             fs::write(&path, json).ok();
@@ -258,9 +258,24 @@ impl cosmic::Application for Launcher {
                     }
                 }
             }
-            Message::DeleteEntry(idx) => {                if idx < self.history.entries.len() {
+            Message::DeleteEntry(idx) => {
+                if idx < self.history.entries.len() {
+                    // Find list position of deleted entry to adjust selected_index
+                    let deleted_list_pos = self.filtered_entries()
+                        .iter()
+                        .position(|(i, _)| *i == idx);
                     self.history.entries.remove(idx);
                     save_history(&self.history);
+                    if let (Some(sel), Some(del_pos)) = (self.selected_index, deleted_list_pos) {
+                        let count = self.filtered_entries().len();
+                        self.selected_index = if count == 0 {
+                            None
+                        } else if del_pos < sel {
+                            Some((sel - 1).min(count - 1))
+                        } else {
+                            Some(sel.min(count - 1))
+                        };
+                    }
                 }
             }
             Message::CopyEntry(idx) => {
