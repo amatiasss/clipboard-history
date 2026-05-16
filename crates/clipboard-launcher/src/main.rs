@@ -317,8 +317,8 @@ impl cosmic::Application for Launcher {
         } else {
             for (list_pos, (idx, entry)) in entries.iter().enumerate() {
                 let converted = replace_shortcodes(entry);
-                let first_line = converted.lines().next().unwrap_or("").chars().take(35).collect::<String>();
-                let preview = if converted.lines().count() > 1 || converted.chars().count() > 35 {
+                let first_line = converted.lines().next().unwrap_or("").chars().take(70).collect::<String>();
+                let preview = if converted.lines().count() > 1 || converted.chars().count() > 70 {
                     format!("{}…", first_line)
                 } else {
                     first_line
