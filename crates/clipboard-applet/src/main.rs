@@ -40,6 +40,8 @@ const APP_ID: &str = "com.github.clipboard-history";
 const CONFIG_VERSION: u64 = 1;
 const DEFAULT_MAX_ENTRIES: usize = 20;
 const SCROLL_ID: &str = "clipboard-scroll";
+const SEARCH_ID: &str = "clipboard-search";
+const FOCUS_SINK_ID: &str = "clipboard-focus-sink";
 
 static TOOLTIP: Lazy<String> = Lazy::new(|| fl!("applet-tooltip"));
 
@@ -158,7 +160,23 @@ pub enum Message {
     KeyDown,
     KeyEnter,
     SearchChanged(String),
-    FocusSearch,
+    SearchBackspace,
+    DeleteSelected,
+    QuickCopy(usize),
+}
+
+impl Window {
+    fn filtered_entries(&self) -> Vec<(usize, &String)> {
+        let search_lower = self.search.to_lowercase();
+        self.history
+            .entries
+            .iter()
+            .enumerate()
+            .rev()
+            .filter(|(_, e)| search_lower.is_empty() || e.to_lowercase().contains(&search_lower))
+            .take(self.max_entries)
+            .collect()
+    }
 }
 
 impl cosmic::Application for Window {
@@ -192,12 +210,13 @@ impl cosmic::Application for Window {
                     cosmic::app::Action::Surface(a),
                 ));
             }
-            Message::FocusSearch => {
-                self.selected_index = None;
-                self.search = String::new();
-            }
             Message::SearchChanged(s) => {
                 self.search = s;
+                self.selected_index = None;
+                return cosmic::widget::text_input::focus(cosmic::widget::Id::new(SEARCH_ID));
+            }
+            Message::SearchBackspace => {
+                self.search.pop();
                 self.selected_index = None;
             }
             Message::CopyEntry(idx) => {
@@ -224,8 +243,33 @@ impl cosmic::Application for Window {
             }
             Message::DeleteEntry(idx) => {
                 if idx < self.history.entries.len() {
+                    let deleted_list_pos = self.filtered_entries()
+                        .iter()
+                        .position(|(i, _)| *i == idx);
                     self.history.entries.remove(idx);
                     save_history(&self.history);
+                    if let (Some(sel), Some(del_pos)) = (self.selected_index, deleted_list_pos) {
+                        let count = self.filtered_entries().len();
+                        self.selected_index = if count == 0 {
+                            None
+                        } else if del_pos < sel {
+                            Some((sel - 1).min(count - 1))
+                        } else {
+                            Some(sel.min(count - 1))
+                        };
+                    }
+                }
+            }
+            Message::DeleteSelected => {
+                if let Some(sel) = self.selected_index {
+                    let entries = self.filtered_entries();
+                    if let Some((idx, _)) = entries.get(sel) {
+                        let idx = *idx;
+                        self.history.entries.remove(idx);
+                        save_history(&self.history);
+                        let count = self.filtered_entries().len();
+                        self.selected_index = if count == 0 { None } else { Some(sel.min(count - 1)) };
+                    }
                 }
             }
             Message::DeleteAll => {
@@ -255,32 +299,26 @@ impl cosmic::Application for Window {
             }
             Message::KeyDown => {
                 if self.popup.is_some() {
-                    let search_lower = self.search.to_lowercase();
-                    let count = self.history.entries.iter()
-                        .filter(|e| search_lower.is_empty() || e.to_lowercase().contains(&search_lower))
-                        .count()
-                        .min(self.max_entries);
+                    let count = self.filtered_entries().len();
                     self.selected_index = Some(match self.selected_index {
                         None => 0,
                         Some(i) => (i + 1).min(count.saturating_sub(1)),
                     });
-                    return scroll_to_selected(self.selected_index, count);
+                    let scroll = scroll_to_selected(self.selected_index, count);
+                    let sink = cosmic::widget::button::focus(cosmic::widget::Id::new(FOCUS_SINK_ID));
+                    return Task::batch([scroll, sink]);
                 }
             }
             Message::KeyUp => {
                 if self.popup.is_some() {
                     match self.selected_index {
-                        None => {}
-                        Some(0) => {
+                        None | Some(0) => {
                             self.selected_index = None;
+                            return cosmic::widget::text_input::focus(cosmic::widget::Id::new(SEARCH_ID));
                         }
                         Some(i) => {
                             self.selected_index = Some(i - 1);
-                            let search_lower = self.search.to_lowercase();
-                            let count = self.history.entries.iter()
-                                .filter(|e| search_lower.is_empty() || e.to_lowercase().contains(&search_lower))
-                                .count()
-                                .min(self.max_entries);
+                            let count = self.filtered_entries().len();
                             return scroll_to_selected(self.selected_index, count);
                         }
                     }
@@ -289,15 +327,20 @@ impl cosmic::Application for Window {
             Message::KeyEnter => {
                 if self.popup.is_some() {
                     if let Some(sel) = self.selected_index {
-                        let search_lower = self.search.to_lowercase();
-                        let entries: Vec<(usize, &String)> = self.history.entries
-                            .iter().enumerate().rev()
-                            .filter(|(_, e)| search_lower.is_empty() || e.to_lowercase().contains(&search_lower))
-                            .take(self.max_entries)
-                            .collect();
+                        let entries = self.filtered_entries();
                         if let Some((idx, _)) = entries.get(sel) {
-                            return cosmic::task::message(cosmic::Action::App(Message::CopyEntry(*idx)));
+                            let idx = *idx;
+                            return cosmic::task::message(cosmic::Action::App(Message::CopyEntry(idx)));
                         }
+                    }
+                }
+            }
+            Message::QuickCopy(pos) => {
+                if self.popup.is_some() {
+                    let entries = self.filtered_entries();
+                    if let Some((idx, _)) = entries.get(pos) {
+                        let idx = *idx;
+                        return cosmic::task::message(cosmic::Action::App(Message::CopyEntry(idx)));
                     }
                 }
             }
@@ -357,12 +400,7 @@ impl cosmic::Application for Window {
     }
 
     fn view_window(&self, _id: Id) -> Element<'_, Message> {
-        let search_lower = self.search.to_lowercase();
-        let entries: Vec<(usize, &String)> = self.history.entries
-            .iter().enumerate().rev()
-            .filter(|(_, e)| search_lower.is_empty() || e.to_lowercase().contains(&search_lower))
-            .take(self.max_entries)
-            .collect();
+        let entries = self.filtered_entries();
 
         let mut list_items: Vec<Element<Message>> = Vec::new();
 
@@ -377,14 +415,24 @@ impl cosmic::Application for Window {
         } else {
             for (list_pos, (idx, entry)) in entries.iter().enumerate() {
                 let converted = replace_shortcodes(entry);
-                let first_line = converted.lines().next().unwrap_or("").chars().take(35).collect::<String>();
-                let preview = if converted.lines().count() > 1 || converted.chars().count() > 35 {
+                let first_line = converted.lines().next().unwrap_or("").chars().take(70).collect::<String>();
+                let preview = if converted.lines().count() > 1 || converted.chars().count() > 70 {
                     format!("{}…", first_line)
                 } else {
                     first_line
                 };
 
                 let row = cosmic::widget::row::with_children(vec![
+                    if list_pos >= 1 && list_pos <= 9 {
+                        cosmic::widget::text(format!("{}", list_pos))
+                            .size(12)
+                            .class(cosmic::theme::Text::Color(
+                                cosmic::iced::Color { r: 0.5, g: 0.5, b: 0.5, a: 1.0 }
+                            ))
+                            .into()
+                    } else {
+                        cosmic::widget::Space::new().width(Length::Fixed(12.0)).into()
+                    },
                     cosmic::widget::text(preview).size(14).width(Length::Fill).into(),
                     cosmic::widget::button::icon(
                         cosmic::widget::icon::from_name("edit-delete-symbolic"),
@@ -392,6 +440,7 @@ impl cosmic::Application for Window {
                     .on_press(Message::DeleteEntry(*idx))
                     .into(),
                 ])
+                .spacing(8)
                 .align_y(cosmic::iced::Alignment::Center)
                 .padding([0, 8])
                 .width(Length::Fill);
@@ -465,10 +514,16 @@ impl cosmic::Application for Window {
         ])
         .align_y(cosmic::iced::Alignment::Center);
 
+        let sink = cosmic::widget::button::custom(cosmic::widget::text(""))
+            .id(cosmic::widget::Id::new(FOCUS_SINK_ID))
+            .width(Length::Fixed(0.0))
+            .height(Length::Fixed(0.0));
+
         let content = cosmic::widget::column::with_children(vec![
             cosmic::widget::container(
                 cosmic::widget::search_input(fl!("search-placeholder"), &self.search)
                     .on_input(Message::SearchChanged)
+                    .id(cosmic::widget::Id::new(SEARCH_ID))
                     .width(Length::Fill),
             )
             .padding([8, 8, 4, 8])
@@ -488,6 +543,7 @@ impl cosmic::Application for Window {
                 .padding([4, 8, 8, 8])
                 .width(Length::Fill)
                 .into(),
+            sink.into(),
         ])
         .width(Length::Fill);
 
@@ -497,18 +553,38 @@ impl cosmic::Application for Window {
     fn subscription(&self) -> cosmic::iced::Subscription<Message> {
         cosmic::iced::event::listen_with(|event, _, _| {
             use cosmic::iced::Event;
-            use cosmic::iced::keyboard::{Event as KeyEvent, Key, Modifiers, key::Named};
+            use cosmic::iced::keyboard::{Event as KeyEvent, Key, key::Named};
             if let Event::Keyboard(KeyEvent::KeyPressed { key, modifiers, .. }) = event {
                 match key {
                     Key::Named(Named::ArrowDown) => return Some(Message::KeyDown),
                     Key::Named(Named::ArrowUp) => return Some(Message::KeyUp),
                     Key::Named(Named::Enter) => return Some(Message::KeyEnter),
-                    Key::Named(_) => return None,
-                    Key::Character(c) if c.as_ref() as &str == "k" && modifiers.contains(Modifiers::CTRL) => {
-                        return Some(Message::FocusSearch)
+                    Key::Named(Named::Backspace) => return Some(Message::SearchBackspace),
+                    Key::Character(c) if c.as_ref() as &str == "j" && modifiers.control() => {
+                        return Some(Message::KeyDown)
                     }
-                    Key::Character(_) => return None,
-                    _ => return None,
+                    Key::Character(c) if c.as_ref() as &str == "k" && modifiers.control() => {
+                        return Some(Message::KeyUp)
+                    }
+                    Key::Character(c) if modifiers.control() => {
+                        let s = c.as_ref() as &str;
+                        return match s {
+                            "1" => Some(Message::QuickCopy(1)),
+                            "2" => Some(Message::QuickCopy(2)),
+                            "3" => Some(Message::QuickCopy(3)),
+                            "4" => Some(Message::QuickCopy(4)),
+                            "5" => Some(Message::QuickCopy(5)),
+                            "6" => Some(Message::QuickCopy(6)),
+                            "7" => Some(Message::QuickCopy(7)),
+                            "8" => Some(Message::QuickCopy(8)),
+                            "9" => Some(Message::QuickCopy(9)),
+                            _ => None,
+                        };
+                    }
+                    Key::Character(c) if c.as_ref() as &str == "d" => {
+                        return Some(Message::DeleteSelected)
+                    }
+                    _ => {}
                 }
             }
             None
