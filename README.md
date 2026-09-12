@@ -70,6 +70,8 @@ clipboard-history/
 │   │   │   ├── en/clipboard_launcher.ftl
 │   │   │   └── pt-BR/clipboard_launcher.ftl
 │   │   └── com.github.clipboard-history.Launcher.desktop
+│   ├── clipboard-theme/        # Shared styling helpers (glass_container, load_glass_opacity)
+│   │   └── src/lib.rs
 │   └── clipboard-daemon/       # Wayland clipboard monitor
 │       └── src/main.rs
 ├── Cargo.toml                  # Workspace
@@ -87,6 +89,8 @@ clipboard-history/
 - **i18n** — uses `i18n-embed` + `fluent`. Loader is a `once_cell::sync::Lazy<FluentLanguageLoader>`. The `fl!` macro wraps `i18n_embed_fl::fl!` with the global loader.
 - **Private mode** — implemented as a sentinel file `.private` in the data dir. The daemon checks for it on every clipboard event; the applet toggles it.
 - **History file locking** — `fs2` file locks are used on every read/write to prevent corruption when daemon and applet/launcher access the file concurrently.
+- **COSMIC theme inheritance** — both the applet and launcher inherit the active COSMIC theme (light/dark, accent color, corner radii, density) automatically via `libcosmic`. The launcher additionally implements `fn style()` returning a transparent background so the compositor can render the glass effect correctly.
+- **Glass effect** — a semi-transparent background derived from the active theme palette is applied via `clipboard-theme::glass_container()`. Intensity is configurable via `cosmic-config` key `glass_opacity` (f32, 0.0 = solid, 1.0 = fully transparent; default: 0.18). Config paths: `~/.config/cosmic/com.github.clipboard-history/v1/glass_opacity` (applet) and `~/.config/cosmic/com.github.clipboard-history.Launcher/v1/glass_opacity` (launcher).
 
 ### Launcher keyboard shortcuts
 
@@ -129,3 +133,4 @@ Use the existing `en/` files as reference for the required keys.
 - xdg-popup does not receive keyboard focus from the Wayland compositor without a mouse click. Typing works immediately only after clicking inside the popup (applet only; the launcher has exclusive keyboard focus by design).
 - No IPC: if the daemon is not running, no new entries are captured (existing history is still accessible).
 - `wl-copy` child process is detached with `mem::forget` to avoid blocking the UI thread.
+- **Glass effect has no blur** — the semi-transparent background is implemented via RGBA alpha on the theme color. True compositor blur (frosted-glass) requires a Wayland protocol that `cosmic-comp` does not currently expose, and `libcosmic`'s `set_blur()` on the Wayland backend is a no-op stub as of commit `adb3e34`. When `cosmic-comp` adds blur support, the upgrade is isolated to `clipboard-theme::glass_container()`.

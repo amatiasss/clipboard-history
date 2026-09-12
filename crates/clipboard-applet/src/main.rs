@@ -5,6 +5,7 @@ use cosmic::iced::{Length, Rectangle};
 use cosmic::surface::action::{app_popup, destroy_popup};
 use cosmic::Element;
 use cosmic::cosmic_config::{Config, ConfigGet};
+use clipboard_theme;
 use fs2::FileExt;
 use i18n_embed::{
     fluent::{fluent_language_loader, FluentLanguageLoader},
@@ -132,6 +133,7 @@ pub struct Window {
     private_mode: bool,
     selected_index: Option<usize>,
     search: String,
+    glass_opacity: f32,
 }
 
 impl Default for Window {
@@ -144,6 +146,7 @@ impl Default for Window {
             private_mode: private_mode_path().exists(),
             selected_index: None,
             search: String::new(),
+            glass_opacity: clipboard_theme::load_glass_opacity(APP_ID, CONFIG_VERSION),
         }
     }
 }
@@ -366,6 +369,7 @@ impl cosmic::Application for Window {
                         move |state: &mut Window| {
                             state.history = load_history();
                             state.max_entries = load_max_entries();
+                            state.glass_opacity = clipboard_theme::load_glass_opacity(APP_ID, CONFIG_VERSION);
                             state.selected_index = None;
                             state.search = String::new();
                             let new_id = Id::unique();
@@ -426,9 +430,7 @@ impl cosmic::Application for Window {
                     if list_pos >= 1 && list_pos <= 9 {
                         cosmic::widget::text(format!("{}", list_pos))
                             .size(12)
-                            .class(cosmic::theme::Text::Color(
-                                cosmic::iced::Color { r: 0.5, g: 0.5, b: 0.5, a: 1.0 }
-                            ))
+                            .class(cosmic::theme::Text::Color(clipboard_theme::COLOR_CONTROL))
                             .into()
                     } else {
                         cosmic::widget::Space::new().width(Length::Fixed(12.0)).into()
@@ -450,14 +452,55 @@ impl cosmic::Application for Window {
                     .on_press(Message::CopyEntry(*idx))
                     .width(Length::Fill)
                     .class(if is_selected {
-                        cosmic::theme::Button::Suggested
+                        cosmic::theme::Button::Custom {
+                            active: Box::new(|_, theme| {
+                                let cosmic = theme.cosmic();
+                                cosmic::widget::button::Style {
+                                    background: Some(cosmic::iced::Background::Color(clipboard_theme::COLOR_ACCENT)),
+                                    border_radius: cosmic.corner_radii.radius_s.into(),
+                                    text_color: Some(clipboard_theme::COLOR_TEXT),
+                                    ..Default::default()
+                                }
+                            }),
+                            disabled: Box::new(|theme| {
+                                let cosmic = theme.cosmic();
+                                cosmic::widget::button::Style {
+                                    background: Some(cosmic::iced::Background::Color(clipboard_theme::COLOR_ACCENT)),
+                                    border_radius: cosmic.corner_radii.radius_s.into(),
+                                    text_color: Some(clipboard_theme::COLOR_TEXT),
+                                    ..Default::default()
+                                }
+                            }),
+                            hovered: Box::new(|_, theme| {
+                                let cosmic = theme.cosmic();
+                                cosmic::widget::button::Style {
+                                    background: Some(cosmic::iced::Background::Color(
+                                        cosmic::iced::Color { a: 0.85, ..clipboard_theme::COLOR_ACCENT }
+                                    )),
+                                    border_radius: cosmic.corner_radii.radius_s.into(),
+                                    text_color: Some(clipboard_theme::COLOR_TEXT),
+                                    ..Default::default()
+                                }
+                            }),
+                            pressed: Box::new(|_, theme| {
+                                let cosmic = theme.cosmic();
+                                cosmic::widget::button::Style {
+                                    background: Some(cosmic::iced::Background::Color(
+                                        cosmic::iced::Color { a: 0.70, ..clipboard_theme::COLOR_ACCENT }
+                                    )),
+                                    border_radius: cosmic.corner_radii.radius_s.into(),
+                                    text_color: Some(clipboard_theme::COLOR_TEXT),
+                                    ..Default::default()
+                                }
+                            }),
+                        }
                     } else {
                         cosmic::theme::Button::Custom {
                             active: Box::new(|_, theme| {
                                 let cosmic = theme.cosmic();
                                 cosmic::widget::button::Style {
                                     border_radius: cosmic.corner_radii.radius_s.into(),
-                                    text_color: Some(cosmic.background.component.on.into()),
+                                    text_color: Some(clipboard_theme::COLOR_TEXT),
                                     ..Default::default()
                                 }
                             }),
@@ -465,25 +508,29 @@ impl cosmic::Application for Window {
                                 let cosmic = theme.cosmic();
                                 cosmic::widget::button::Style {
                                     border_radius: cosmic.corner_radii.radius_s.into(),
-                                    text_color: Some(cosmic.background.component.on.into()),
+                                    text_color: Some(clipboard_theme::COLOR_TEXT),
                                     ..Default::default()
                                 }
                             }),
                             hovered: Box::new(|_, theme| {
                                 let cosmic = theme.cosmic();
                                 cosmic::widget::button::Style {
-                                    background: Some(cosmic::iced::Background::Color(cosmic.background.component.hover.into())),
+                                    background: Some(cosmic::iced::Background::Color(
+                                        cosmic::iced::Color { a: 0.15, ..clipboard_theme::COLOR_CONTROL }
+                                    )),
                                     border_radius: cosmic.corner_radii.radius_s.into(),
-                                    text_color: Some(cosmic.background.component.on.into()),
+                                    text_color: Some(clipboard_theme::COLOR_TEXT),
                                     ..Default::default()
                                 }
                             }),
                             pressed: Box::new(|_, theme| {
                                 let cosmic = theme.cosmic();
                                 cosmic::widget::button::Style {
-                                    background: Some(cosmic::iced::Background::Color(cosmic.background.component.pressed.into())),
+                                    background: Some(cosmic::iced::Background::Color(
+                                        cosmic::iced::Color { a: 0.25, ..clipboard_theme::COLOR_CONTROL }
+                                    )),
                                     border_radius: cosmic.corner_radii.radius_s.into(),
-                                    text_color: Some(cosmic.background.component.on.into()),
+                                    text_color: Some(clipboard_theme::COLOR_TEXT),
                                     ..Default::default()
                                 }
                             }),
@@ -524,6 +571,7 @@ impl cosmic::Application for Window {
                 cosmic::widget::search_input(fl!("search-placeholder"), &self.search)
                     .on_input(Message::SearchChanged)
                     .id(cosmic::widget::Id::new(SEARCH_ID))
+                    .style(clipboard_theme::search_input_style())
                     .width(Length::Fill),
             )
             .padding([8, 8, 4, 8])
@@ -547,7 +595,7 @@ impl cosmic::Application for Window {
         ])
         .width(Length::Fill);
 
-        self.core.applet.popup_container(content).into()
+        clipboard_theme::popup_container(content, self.glass_opacity)
     }
 
     fn subscription(&self) -> cosmic::iced::Subscription<Message> {
