@@ -90,7 +90,7 @@ clipboard-history/
 - **Private mode** — implemented as a sentinel file `.private` in the data dir. The daemon checks for it on every clipboard event; the applet toggles it.
 - **History file locking** — `fs2` file locks are used on every read/write to prevent corruption when daemon and applet/launcher access the file concurrently.
 - **COSMIC theme inheritance** — both the applet and launcher inherit the active COSMIC theme (light/dark, accent color, corner radii, density) automatically via `libcosmic`. The launcher additionally implements `fn style()` returning a transparent background so the compositor can render the glass effect correctly.
-- **Glass effect** — a semi-transparent background derived from the active theme palette is applied via `clipboard-theme::glass_container()`. Intensity is configurable via `cosmic-config` key `glass_opacity` (f32, 0.0 = solid, 1.0 = fully transparent; default: 0.18). Config paths: `~/.config/cosmic/com.github.clipboard-history/v1/glass_opacity` (applet) and `~/.config/cosmic/com.github.clipboard-history.Launcher/v1/glass_opacity` (launcher).
+- **Glass effect** — a semi-transparent background derived from the active theme palette is applied via `clipboard-theme::glass_container()`. Intensity is configurable via `cosmic-config` key `glass_opacity` (f32, 0.0 = solid, 1.0 = fully transparent; default: 0.0). Config paths: `~/.config/cosmic/com.github.clipboard-history/v1/glass_opacity` (applet) and `~/.config/cosmic/com.github.clipboard-history.Launcher/v1/glass_opacity` (launcher).
 
 ### Launcher keyboard shortcuts
 

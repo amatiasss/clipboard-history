@@ -7,7 +7,7 @@ use cosmic::widget::container;
 use cosmic::Element;
 
 /// Opacidade padrão do efeito glass (0.0 = sólido, 1.0 = invisível).
-pub const DEFAULT_GLASS_OPACITY: f32 = 0.18;
+pub const DEFAULT_GLASS_OPACITY: f32 = 0.0;
 
 // Cores do tema do usuário — hardcoded por não estarem disponíveis via cosmic-config
 // em tempo de execução (o cosmic-settings-daemon não regrava o arquivo de tema no disco
@@ -179,6 +179,11 @@ mod tests {
     #[test]
     fn default_opacity_dentro_do_intervalo() {
         assert!(DEFAULT_GLASS_OPACITY >= 0.0 && DEFAULT_GLASS_OPACITY <= 1.0);
+    }
+
+    #[test]
+    fn default_opacity_e_solido() {
+        assert_eq!(DEFAULT_GLASS_OPACITY, 0.0);
     }
 
     #[test]
