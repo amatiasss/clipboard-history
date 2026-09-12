@@ -8,6 +8,7 @@ use cosmic::iced::runtime::core::window::Id as SurfaceId;
 use cosmic::iced::widget::scrollable;
 use cosmic::iced::{Length, Subscription};
 use cosmic::Element;
+use clipboard_theme;
 use fs2::FileExt;
 use i18n_embed::{
     fluent::{fluent_language_loader, FluentLanguageLoader},
@@ -40,6 +41,7 @@ macro_rules! fl {
 }
 
 const APP_ID: &str = "com.github.clipboard-history.Launcher";
+const CONFIG_VERSION: u64 = 1;
 const SCROLL_ID: &str = "launcher-scroll";
 const SEARCH_ID: &str = "launcher-search";
 const FOCUS_SINK_ID: &str = "launcher-focus-sink";
@@ -117,6 +119,7 @@ pub struct Launcher {
     search: String,
     selected_index: Option<usize>,
     max_entries: usize,
+    glass_opacity: f32,
 }
 
 #[derive(Clone, Debug)]
@@ -166,6 +169,7 @@ impl cosmic::Application for Launcher {
             search: String::new(),
             selected_index: None,
             max_entries: 20,
+            glass_opacity: clipboard_theme::load_glass_opacity(APP_ID, CONFIG_VERSION),
         };
         let open = get_layer_surface(SctkLayerSurfaceSettings {
             id: window_id,
@@ -304,6 +308,19 @@ impl cosmic::Application for Launcher {
         cosmic::widget::text("").into()
     }
 
+    fn style(&self) -> Option<cosmic::iced::theme::Style> {
+        // Fundo da superfície Wayland transparente para que o canal alpha do
+        // glass_container tenha efeito visual (sem esse style, a camada de
+        // compositing pode forçar opacidade total).
+        // Mesmo padrão de cosmic::applet::style() — text/icon derivados do tema.
+        let theme = cosmic::theme::active();
+        Some(cosmic::iced::theme::Style {
+            background_color: cosmic::iced::Color::from_rgba(0.0, 0.0, 0.0, 0.0),
+            text_color: theme.cosmic().on_bg_color().into(),
+            icon_color: theme.cosmic().on_bg_color().into(),
+        })
+    }
+
     fn view_window(&self, _id: SurfaceId) -> Element<'_, Message> {
         let entries = self.filtered_entries();
 
@@ -328,9 +345,7 @@ impl cosmic::Application for Launcher {
                     if list_pos >= 1 && list_pos <= 9 {
                         cosmic::widget::text(format!("{}", list_pos))
                             .size(12)
-                            .class(cosmic::theme::Text::Color(
-                                cosmic::iced::Color { r: 0.5, g: 0.5, b: 0.5, a: 1.0 }
-                            ))
+                            .class(cosmic::theme::Text::Color(clipboard_theme::COLOR_CONTROL))
                             .into()
                     } else {
                         cosmic::widget::Space::new().width(Length::Fixed(12.0)).into()
@@ -352,14 +367,55 @@ impl cosmic::Application for Launcher {
                     .on_press(Message::CopyEntry(*idx))
                     .width(Length::Fill)
                     .class(if is_selected {
-                        cosmic::theme::Button::Suggested
+                        cosmic::theme::Button::Custom {
+                            active: Box::new(|_, theme| {
+                                let cosmic = theme.cosmic();
+                                cosmic::widget::button::Style {
+                                    background: Some(cosmic::iced::Background::Color(clipboard_theme::COLOR_ACCENT)),
+                                    border_radius: cosmic.corner_radii.radius_s.into(),
+                                    text_color: Some(clipboard_theme::COLOR_TEXT),
+                                    ..Default::default()
+                                }
+                            }),
+                            disabled: Box::new(|theme| {
+                                let cosmic = theme.cosmic();
+                                cosmic::widget::button::Style {
+                                    background: Some(cosmic::iced::Background::Color(clipboard_theme::COLOR_ACCENT)),
+                                    border_radius: cosmic.corner_radii.radius_s.into(),
+                                    text_color: Some(clipboard_theme::COLOR_TEXT),
+                                    ..Default::default()
+                                }
+                            }),
+                            hovered: Box::new(|_, theme| {
+                                let cosmic = theme.cosmic();
+                                cosmic::widget::button::Style {
+                                    background: Some(cosmic::iced::Background::Color(
+                                        cosmic::iced::Color { a: 0.85, ..clipboard_theme::COLOR_ACCENT }
+                                    )),
+                                    border_radius: cosmic.corner_radii.radius_s.into(),
+                                    text_color: Some(clipboard_theme::COLOR_TEXT),
+                                    ..Default::default()
+                                }
+                            }),
+                            pressed: Box::new(|_, theme| {
+                                let cosmic = theme.cosmic();
+                                cosmic::widget::button::Style {
+                                    background: Some(cosmic::iced::Background::Color(
+                                        cosmic::iced::Color { a: 0.70, ..clipboard_theme::COLOR_ACCENT }
+                                    )),
+                                    border_radius: cosmic.corner_radii.radius_s.into(),
+                                    text_color: Some(clipboard_theme::COLOR_TEXT),
+                                    ..Default::default()
+                                }
+                            }),
+                        }
                     } else {
                         cosmic::theme::Button::Custom {
                             active: Box::new(|_, theme| {
                                 let cosmic = theme.cosmic();
                                 cosmic::widget::button::Style {
                                     border_radius: cosmic.corner_radii.radius_s.into(),
-                                    text_color: Some(cosmic.background.component.on.into()),
+                                    text_color: Some(clipboard_theme::COLOR_TEXT),
                                     ..Default::default()
                                 }
                             }),
@@ -367,25 +423,29 @@ impl cosmic::Application for Launcher {
                                 let cosmic = theme.cosmic();
                                 cosmic::widget::button::Style {
                                     border_radius: cosmic.corner_radii.radius_s.into(),
-                                    text_color: Some(cosmic.background.component.on.into()),
+                                    text_color: Some(clipboard_theme::COLOR_TEXT),
                                     ..Default::default()
                                 }
                             }),
                             hovered: Box::new(|_, theme| {
                                 let cosmic = theme.cosmic();
                                 cosmic::widget::button::Style {
-                                    background: Some(cosmic::iced::Background::Color(cosmic.background.component.hover.into())),
+                                    background: Some(cosmic::iced::Background::Color(
+                                        cosmic::iced::Color { a: 0.15, ..clipboard_theme::COLOR_CONTROL }
+                                    )),
                                     border_radius: cosmic.corner_radii.radius_s.into(),
-                                    text_color: Some(cosmic.background.component.on.into()),
+                                    text_color: Some(clipboard_theme::COLOR_TEXT),
                                     ..Default::default()
                                 }
                             }),
                             pressed: Box::new(|_, theme| {
                                 let cosmic = theme.cosmic();
                                 cosmic::widget::button::Style {
-                                    background: Some(cosmic::iced::Background::Color(cosmic.background.component.pressed.into())),
+                                    background: Some(cosmic::iced::Background::Color(
+                                        cosmic::iced::Color { a: 0.25, ..clipboard_theme::COLOR_CONTROL }
+                                    )),
                                     border_radius: cosmic.corner_radii.radius_s.into(),
-                                    text_color: Some(cosmic.background.component.on.into()),
+                                    text_color: Some(clipboard_theme::COLOR_TEXT),
                                     ..Default::default()
                                 }
                             }),
@@ -401,6 +461,7 @@ impl cosmic::Application for Launcher {
                 cosmic::widget::search_input(search_placeholder, &self.search)
                     .on_input(Message::SearchChanged)
                     .id(cosmic::widget::Id::new(SEARCH_ID))
+                    .style(clipboard_theme::search_input_style())
                     .width(Length::Fill),
             )
             .padding([8, 8, 4, 8])
@@ -425,11 +486,7 @@ impl cosmic::Application for Launcher {
             .height(Length::Fixed(0.0));
 
         cosmic::widget::column::with_children(vec![
-            cosmic::widget::container(content)
-                .class(cosmic::theme::Container::Background)
-                .width(Length::Fill)
-                .height(Length::Shrink)
-                .into(),
+            clipboard_theme::glass_container(content, self.glass_opacity),
             sink.into(),
         ])
         .into()

@@ -672,6 +672,7 @@ checksum = "613afe47fcd5fac7ccf1db93babcb082c5994d996f20b8b159f2ad1658eb5724"
 name = "clipboard-applet"
 version = "0.1.0"
 dependencies = [
+ "clipboard-theme",
  "dirs-next",
  "emojis",
  "fs2",
@@ -699,6 +700,7 @@ dependencies = [
 name = "clipboard-launcher"
 version = "0.1.0"
 dependencies = [
+ "clipboard-theme",
  "dirs-next",
  "emojis",
  "fs2",
@@ -709,6 +711,13 @@ dependencies = [
  "rust-embed",
  "serde",
  "serde_json",
+]
+
+[[package]]
+name = "clipboard-theme"
+version = "0.1.0"
+dependencies = [
+ "libcosmic",
 ]
 
 [[package]]
